@@ -193,6 +193,30 @@ st.divider()
 st.subheader("3. Resultado del FeNO")
 
 res = session.result
+
+# ── Valores por defecto para Medellín (solo en modo manual) ──────────────
+# Se aplican únicamente si el campo aún no tiene valor (sesión nueva).
+# Medellín, 1.495 m s.n.m.: temperatura interior promedio ~22 °C;
+# presión de exhalación del dispositivo típica: 14,0 cmH₂O;
+# flujo estándar ATS 2011: 50,0 mL/s.
+MODO_MANUAL = "①" in modo
+if MODO_MANUAL:
+    if res.flow_rate_ml_s is None:
+        res.flow_rate_ml_s = 50.0
+    if res.temperature_c is None:
+        res.temperature_c = 22.0
+    if res.pressure_cmh2o is None:
+        res.pressure_cmh2o = 14.0
+    if not res.sampling_method:
+        res.sampling_method = "Directo"
+
+if MODO_MANUAL:
+    st.info(
+        "📍 **Valores estándar para Medellín (1.495 m s.n.m.) precargados:** "
+        "temperatura 22,0 °C · presión 14,0 cmH₂O · flujo 50,0 mL/s · "
+        "método Directo. Modifícalos si el equipo reporta valores distintos."
+    )
+
 col_r1, col_r2, col_r3 = st.columns(3)
 
 with col_r1:
@@ -226,11 +250,13 @@ with col_r3:
     no_flux = st.number_input(
         "Flujo de NO (pl/s)",
         min_value=0.0,
-        value=float(res.no_flux_pl_s or 0.0), step=1.0)
+        value=float(res.no_flux_pl_s or 0.0), step=1.0,
+        help="Valor reportado por el equipo. Depende del FeNO medido.")
     res.no_flux_pl_s = no_flux if no_flux > 0 else None
 
-    res.sampling_method = st.text_input("Método de muestreo",
-                                        res.sampling_method or "Directo")
+    res.sampling_method = st.text_input(
+        "Método de muestreo",
+        res.sampling_method or "Directo")
 
 # Valor previo (seguimiento)
 with st.expander("📈 Comparación con medición previa (opcional — para seguimiento)"):
