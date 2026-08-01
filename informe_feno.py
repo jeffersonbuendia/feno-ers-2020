@@ -359,34 +359,42 @@ class InformeFeNO:
         bajo_max = result.umbral_bajo_max
         alto_min = result.umbral_alto_min
 
-        # --- Panel grande con el valor ---
         col_text, col_fill = _COLOR_CATEGORIA.get(
             result.categoria_color, (AZUL, AZUL_C))
-
         valor_txt = f"{feno:.0f}" if result.feno50 else "—"
+
+        # ── Anchos de las dos columnas (suman 0,98·w para dejar margen) ────
+        lw = w * 0.32   # columna izquierda: valor grande
+        rw = w * 0.66   # columna derecha: umbrales + parámetros técnicos
+
+        # ── Columna izquierda: valor numérico grande ────────────────────────
+        ppb_style = ParagraphStyle(
+            "ppb", parent=self._estilos["cuerpo"],
+            fontName="Helvetica-Bold", fontSize=17, textColor=GRIS_T,
+            alignment=TA_CENTER)
         t_valor = Table(
             [[Paragraph(valor_txt, self._estilos["grande"]),
-              Paragraph("ppb", ParagraphStyle(
-                  "ppb", parent=self._estilos["cuerpo"],
-                  fontName="Helvetica-Bold", fontSize=18, textColor=GRIS_T))]],
-            colWidths=[w * .35, w * .15])
+              Paragraph("ppb", ppb_style)]],
+            colWidths=[lw * 0.73, lw * 0.27])
         t_valor.setStyle(TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("BACKGROUND", (0, 0), (-1, -1), col_fill),
             ("BOX", (0, 0), (-1, -1), 1.5, col_text),
-            ("TOPPADDING", (0, 0), (-1, -1), 10),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("TOPPADDING", (0, 0), (-1, -1), 14),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ]))
 
-        # --- Tabla de umbrales ---
+        # ── Tabla de umbrales (columna derecha, superior) ───────────────────
         def _umbral_row(label, rango, activa):
-            c, f = (col_text, col_fill) if activa else (colors.black, colors.white)
+            c = col_text if activa else colors.black
+            fn = "Helvetica-Bold" if activa else "Helvetica"
             return [
                 Paragraph(f"<b>{label}</b>" if activa else label,
                           ParagraphStyle("u", parent=self._estilos["celda"],
-                                         textColor=c,
-                                         fontName="Helvetica-Bold" if activa else "Helvetica")),
+                                         textColor=c, fontName=fn)),
                 Paragraph(rango, ParagraphStyle("r", parent=self._estilos["celda"],
                                                alignment=TA_CENTER, textColor=c)),
                 Paragraph("◀ RESULTADO" if activa else "",
@@ -397,7 +405,7 @@ class InformeFeNO:
 
         poblacion = "niños" if paed else "adultos"
         filas_umb = [
-            [Paragraph(f"Umbrales {poblacion}", self._estilos["celda"]),
+            [Paragraph(f"Umbrales — {poblacion}", self._estilos["celda"]),
              Paragraph("Rango", self._estilos["celda"]),
              Paragraph("", self._estilos["celda"])],
             _umbral_row("ALTO", f"≥ {alto_min:.0f} ppb", feno >= alto_min),
@@ -406,56 +414,75 @@ class InformeFeNO:
                         bajo_max <= feno < alto_min),
             _umbral_row("BAJO", f"< {bajo_max:.0f} ppb", feno < bajo_max),
         ]
-        rojo_f, ambar_f, verde_f = ROJO_F, AMBAR_F, VERDE_F
-        estilos_umb = [
+        t_umbral = Table(filas_umb,
+                         colWidths=[rw * 0.42, rw * 0.30, rw * 0.28])
+        t_umbral.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), AZUL_C),
-            ("BACKGROUND", (0, 1), (-1, 1), rojo_f),
-            ("BACKGROUND", (0, 2), (-1, 2), ambar_f),
-            ("BACKGROUND", (0, 3), (-1, 3), verde_f),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("BACKGROUND", (0, 1), (-1, 1), ROJO_F),
+            ("BACKGROUND", (0, 2), (-1, 2), AMBAR_F),
+            ("BACKGROUND", (0, 3), (-1, 3), VERDE_F),
             ("ALIGN", (1, 0), (-1, -1), "CENTER"),
             ("GRID", (0, 0), (-1, -1), 0.35, BORDE),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.4),
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]
-        t_umbral = Table(filas_umb, colWidths=[w*.22, w*.18, w*.14])
-        t_umbral.setStyle(TableStyle(estilos_umb))
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ]))
 
-        # --- Parámetros técnicos ---
-        res = session.result
+        # ── Parámetros técnicos (columna derecha, inferior) ─────────────────
         def fv(v, u=""): return f"{v:.1f} {u}".strip() if v is not None else "—"
         filas_tec = [
+            [Paragraph("<b>Parámetro técnico</b>", self._estilos["celda"]),
+             Paragraph("<b>Valor</b>", self._estilos["celda"])],
             ["FeNO50", f"{feno:.0f} ppb"],
-            ["Flujo (estándar 50 mL/s)", fv(res.flow_rate_ml_s, "mL/s")],
+            ["Flujo exhalación (estándar 50 mL/s)", fv(res.flow_rate_ml_s, "mL/s")],
             ["Temperatura", fv(res.temperature_c, "°C")],
             ["Presión", fv(res.pressure_cmh2o, "cmH₂O")],
             ["Flujo de NO", fv(res.no_flux_pl_s, "pl/s")],
-            ["Método", res.sampling_method or "—"],
+            ["Método de muestreo", res.sampling_method or "—"],
         ]
-        estilos_tec = [("BACKGROUND", (0, 0), (0, -1), AZUL_C),
-                       ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, GRIS])]
-        t_tec = Table(filas_tec, colWidths=[w*.22, w*.22])
+        t_tec = Table(filas_tec, colWidths=[rw * 0.55, rw * 0.45])
         t_tec.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.35, BORDE),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.4),
             ("LEFTPADDING", (0, 0), (-1, -1), 4),
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("TOPPADDING", (0, 0), (-1, -1), 3),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.4),
-            ("BACKGROUND", (0, 0), (0, -1), AZUL_C),
-            ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, GRIS]),
+            ("BACKGROUND", (0, 0), (-1, 0), AZUL_C),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, GRIS]),
         ]))
 
-        # Poner los tres elementos en fila
-        fila_principal = Table(
-            [[t_valor, Spacer(4, 1), t_umbral, Spacer(4, 1), t_tec]],
-            colWidths=[w*.51, 4, w*.54, 4, w*.45])
-        fila_principal.setStyle(TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        # ── Columna derecha: umbrales + espacio + técnicos ──────────────────
+        t_right = Table(
+            [[t_umbral], [t_tec]],
+            colWidths=[rw])
+        t_right.setStyle(TableStyle([
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
             ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (0, 0), 0),
+            ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+            ("TOPPADDING", (0, 1), (0, 1), 6),   # separación entre las dos tablas
+            ("BOTTOMPADDING", (0, 1), (0, 1), 0),
         ]))
-        story.append(fila_principal)
+
+        # ── Layout final de 2 columnas ──────────────────────────────────────
+        layout = Table([[t_valor, t_right]], colWidths=[lw, rw])
+        layout.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING", (1, 0), (1, 0), 7),   # separación entre columnas
+        ]))
+
+        story.append(layout)
         story.append(self._blank(6))
 
         # Descripción de la categoría
@@ -469,8 +496,7 @@ class InformeFeNO:
             f"{'niños (< 17 años)' if paed else 'adultos (≥ 17 años)'}. "
             "El FeNO50 se mide a un flujo de exhalación de 50 mL/s. "
             "Un resultado alto indica probable inflamación eosinofílica de la vía aérea, "
-            "pero no es diagnóstico por sí solo: debe integrarse con la historia clínica, "
-            "la espirometría y otros marcadores de inflamación.",
+            "pero no es diagnóstico por sí solo.",
             self._estilos["nota"]))
 
     def _confusores(self, story, result):
