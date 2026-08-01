@@ -195,15 +195,27 @@ class InformeFeNO:
             onPage=lambda c, d: self._decorate(c, d, session, n_reporte))])
 
         story: List[Any] = []
+        # Contador dinámico de secciones (evita saltos 3→5→7)
+        sec = [3]  # ya vienen 1. Paciente y 2. Pre-prueba; resultado es siempre 3
+
         self._alertas(story, result)
         self._paciente(story, session)
         self._pretest(story, session)
         self._resultado_visual(story, session, result)
-        self._confusores(story, result)
-        self._seguimiento(story, session, result)
-        self._conclusion_section(story, result, conclusion)
+
+        if result.confounders:
+            sec[0] += 1
+            self._confusores(story, result, sec[0])
+
+        if result.tiene_previo:
+            sec[0] += 1
+            self._seguimiento(story, session, result, sec[0])
+
+        sec[0] += 1
+        self._conclusion_section(story, result, conclusion, sec[0])
         self._firma(story, session, n_reporte)
-        self._normativa(story)
+        sec[0] += 1
+        self._normativa(story, sec[0])
 
         doc.build(story)
         pdf = buf.getvalue()
@@ -397,7 +409,7 @@ class InformeFeNO:
                                          textColor=c, fontName=fn)),
                 Paragraph(rango, ParagraphStyle("r", parent=self._estilos["celda"],
                                                alignment=TA_CENTER, textColor=c)),
-                Paragraph("◀ RESULTADO" if activa else "",
+                Paragraph("<< RESULTADO" if activa else "",
                           ParagraphStyle("m", parent=self._estilos["celda"],
                                          alignment=TA_CENTER, textColor=c,
                                          fontName="Helvetica-Bold")),
@@ -440,7 +452,7 @@ class InformeFeNO:
             ["FeNO50", f"{feno:.0f} ppb"],
             ["Flujo exhalación (estándar 50 mL/s)", fv(res.flow_rate_ml_s, "mL/s")],
             ["Temperatura", fv(res.temperature_c, "°C")],
-            ["Presión", fv(res.pressure_cmh2o, "cmH₂O")],
+            ["Presión", fv(res.pressure_cmh2o, "cmH2O")],
             ["Flujo de NO", fv(res.no_flux_pl_s, "pl/s")],
             ["Método de muestreo", res.sampling_method or "—"],
         ]
@@ -499,10 +511,10 @@ class InformeFeNO:
             "pero no es diagnóstico por sí solo.",
             self._estilos["nota"]))
 
-    def _confusores(self, story, result):
+    def _confusores(self, story, result, sec: int = 4):
         if not result.confounders:
             return
-        story.extend(self._titulo("4.  FACTORES DE CONFUSIÓN"))
+        story.extend(self._titulo(f"{sec}.  FACTORES DE CONFUSIÓN"))
         w = self._ancho()
         filas = [["Factor", "Efecto potencial", "Recomendación"]]
         for cf in result.confounders:
@@ -524,10 +536,10 @@ class InformeFeNO:
         story.append(self._tabla(filas, [w*.32, w*.20, w*.48],
                                  extra=estilos, cab=False))
 
-    def _seguimiento(self, story, session, result):
+    def _seguimiento(self, story, session, result, sec: int = 5):
         if not result.tiene_previo:
             return
-        story.extend(self._titulo("5.  COMPARACIÓN CON MEDICIÓN PREVIA"))
+        story.extend(self._titulo(f"{sec}.  COMPARACIÓN CON MEDICIÓN PREVIA"))
         w = self._ancho()
         prev = session.result.previous_feno_ppb
         curr = result.feno50
@@ -558,10 +570,8 @@ class InformeFeNO:
             "(NHS SW FeNO Guidance 2022 [3]).",
             self._estilos["nota"]))
 
-    def _conclusion_section(self, story, result, conclusion_editada=""):
-        n = "6" if result.confounders else "5"
-        n = str(int(n) + (1 if result.tiene_previo else 0))
-        story.extend(self._titulo(f"{n}.  CONCLUSIÓN"))
+    def _conclusion_section(self, story, result, conclusion_editada="", sec: int = 4):
+        story.extend(self._titulo(f"{sec}.  CONCLUSIÓN"))
 
         conclusion_final = conclusion_editada.strip() or result.conclusion
         puntos = [s.strip() for s in conclusion_final.split(".")
@@ -615,7 +625,7 @@ class InformeFeNO:
         ]))
         story.append(KeepTogether(t))
 
-    def _normativa(self, story):
+    def _normativa(self, story, sec: int = 5):
         w = self._ancho()
         filas = [["Criterio / parámetro", "Valor aplicado", "Fuente"]]
         for nombre, valor, fuente in CRITERIOS_APLICADOS:
@@ -627,7 +637,7 @@ class InformeFeNO:
         estilos = [("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, GRIS]),
                    ("VALIGN", (0, 0), (-1, -1), "TOP")]
         story.append(Spacer(1, 16))
-        story.extend(self._titulo("7.  CRITERIOS NORMATIVOS APLICADOS"))
+        story.extend(self._titulo(f"{sec}.  CRITERIOS NORMATIVOS APLICADOS"))
         story.append(self._tabla(filas, [w*.28, w*.42, w*.30], extra=estilos))
         story.append(Spacer(1, 6))
         story.append(Paragraph(
